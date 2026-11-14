@@ -42,5 +42,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.WARNING)  # hide the very chatty protocol libraries
     asyncio.run(main())
