@@ -1,4 +1,4 @@
-# Factory Adapter
+# Robot Factory Bridge
 
 One adapter that connects a robot stack to **any factory's control system**, so a
 new customer means a new config file, not a new custom build.
