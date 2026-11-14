@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot Factory Bridge HMI</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0d1117; --panel: #151b23; --panel-2: #1b2330; --line: #2a3441;
+    --text: #e6ebf2; --muted: #8b97a7;
+    --ok: #3ecf8e; --warn: #f5a524; --bad: #ff4d4f; --idle: #6b7685; --accent: #4da3ff;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 var(--sans); }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .02em; }
+  header h1 span { color: var(--muted); font-weight: 400; }
+  .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--idle); }
+  .dot.on { background: var(--ok); } .dot.off { background: var(--bad); }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 40px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; }
+  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .card-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .card-head h2 { margin: 0; font-size: 18px; }
+  .chip { font-size: 12px; font-weight: 600; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--accent); }
+  .endpoint { font: 12px var(--mono); color: var(--muted); margin-left: auto; overflow-wrap: anywhere; }
+
+  .release { display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; font-size: 13px; color: var(--muted); margin-top: -6px; }
+  .release b { font-family: var(--mono); color: var(--text); }
+  .release .ota.ok { color: var(--ok); } .release .ota.warn { color: var(--warn); }
+  .banner { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; background: var(--panel-2); border-left: 6px solid var(--idle); }
+  .banner .big { font-size: 20px; font-weight: 700; letter-spacing: .03em; }
+  .banner .sub { font-size: 13px; color: var(--muted); }
+  .st-running .banner { border-color: var(--ok); } .st-running .big { color: var(--ok); }
+  .st-fault .banner { border-color: var(--bad); } .st-fault .big { color: var(--bad); }
+  .st-estop .banner { border-color: var(--bad); background: #2a1517; } .st-estop .big { color: var(--bad); }
+  .st-offline .banner { border-color: var(--warn); } .st-offline .big { color: var(--warn); }
+
+  .scene { width: 100%; height: auto; border-radius: 8px; background: #10161e; border: 1px solid var(--line); }
+  .scene .floor { fill: #1a222d; } .scene .conv { fill: #2b3544; } .scene .roller { fill: #3b4658; }
+  .scene .belt { stroke: #56647a; stroke-width: 3; stroke-dasharray: 8 10; fill: none; }
+  .scene .part { fill: #c9923b; stroke: #8a6422; stroke-width: 1.5; }
+  .scene .base { fill: #3b4658; } .scene .link { stroke: #9fb0c6; stroke-width: 9; stroke-linecap: round; fill: none; }
+  .scene .joint { fill: #e6ebf2; } .scene .grip { stroke: #e6ebf2; stroke-width: 4; stroke-linecap: round; fill: none; }
+  .scene .beacon { fill: var(--idle); }
+  .scene .nodata { fill: var(--warn); font: 600 14px var(--sans); letter-spacing: .08em; opacity: 0; }
+  .st-running .beacon { fill: var(--ok); }
+  .st-fault .beacon { fill: var(--bad); }
+  .st-estop .beacon { fill: var(--bad); animation: flash .7s steps(2, jump-none) infinite; }
+  .st-estop .scene { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; }
+  .st-offline .scene .moving { opacity: .25; } .st-offline .nodata { opacity: 1; }
+
+  .belt { animation: belt .6s linear infinite; }
+  .part { animation: move 3.6s linear infinite; opacity: 0; }
+  .part.p2 { animation-delay: -1.2s; } .part.p3 { animation-delay: -2.4s; }
+  .upper { transform-origin: 70px 96px; animation: swing-up 1.8s ease-in-out infinite alternate; }
+  .fore { transform-origin: 70px 46px; animation: swing-fore 1.8s ease-in-out infinite alternate; }
+  .belt, .part, .upper, .fore { animation-play-state: paused; }
+  .st-running .belt, .st-running .part, .st-running .upper, .st-running .fore { animation-play-state: running; }
+  @keyframes belt { to { stroke-dashoffset: -18; } }
+  @keyframes move { 0% { transform: translateX(0); opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { transform: translateX(185px); opacity: 0; } }
+  @keyframes swing-up { from { transform: rotate(-22deg); } to { transform: rotate(18deg); } }
+  @keyframes swing-fore { from { transform: rotate(18deg); } to { transform: rotate(-30deg); } }
+  @keyframes flash { 50% { opacity: .15; } }
+  @media (prefers-reduced-motion: reduce) { .belt, .part, .upper, .fore, .beacon { animation: none !important; } .part { opacity: 1; } }
+
+  .metrics { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
+  .metric { background: var(--panel-2); border-radius: 8px; padding: 8px 12px; }
+  .metric .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .metric .v { font: 600 22px var(--mono); }
+  .metric .v.small { font-size: 16px; padding-top: 4px; }
+  .v.alarm { color: var(--bad); } .v.good { color: var(--ok); }
+
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  button { font: 600 14px var(--sans); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; cursor: pointer; min-height: 44px; }
+  button:hover { border-color: #3d4b5f; } button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .b-start { background: #14382a; border-color: #1f5c43; color: #7ae8b8; }
+  .b-estop { margin-left: auto; width: 84px; height: 84px; min-height: 0; padding: 0; border-radius: 50%; font-size: 13px; letter-spacing: .04em; color: #fff;
+             background: radial-gradient(circle at 35% 30%, #ff7a7c, #d62b30 60%, #a11a1f); border: 5px solid #e2b93b; box-shadow: 0 3px 0 #7d6417, 0 0 0 3px #1a1f27; }
+  .b-estop:active { transform: translateY(2px); box-shadow: 0 1px 0 #7d6417, 0 0 0 3px #1a1f27; }
+  .result { flex-basis: 100%; min-height: 20px; font-size: 13px; }
+  .result.ok { color: var(--ok); } .result.refused { color: var(--warn); font-weight: 600; } .result.error { color: var(--bad); }
+  .shake { animation: shake .35s; }
+  @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+
+  details { background: var(--panel-2); border-radius: 8px; padding: 8px 12px; }
+  summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 4px 0; }
+  td { padding: 4px 0; border-top: 1px solid var(--line); } td.addr { font-family: var(--mono); color: var(--accent); }
+  .demo-tools { font-size: 13px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .demo-tools button { padding: 4px 10px; min-height: 32px; font-weight: 500; }
+
+  .log { margin-top: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+  .log h2 { margin: 0 0 8px; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  #events { max-height: 260px; overflow-y: auto; font: 13px var(--mono); }
+  .ev { display: grid; grid-template-columns: 70px 90px 74px 1fr; gap: 10px; padding: 3px 0; border-top: 1px solid var(--line); }
+  .ev:first-child { border-top: 0; } .ev .t { color: var(--muted); } .ev .s { color: var(--accent); }
+  .ev .lv { font-weight: 700; } .ev.ok .lv { color: var(--ok); } .ev.refused .lv { color: var(--warn); } .ev.alarm .lv, .ev.error .lv { color: var(--bad); } .ev.info .lv { color: var(--muted); }
+  .empty { color: var(--muted); font: 13px var(--sans); }
+  footer { margin-top: 18px; font-size: 13px; color: var(--muted); }
+  footer code { font-family: var(--mono); color: var(--text); }
+  @media (max-width: 520px) { .ev { grid-template-columns: 62px 1fr auto; } .ev .m { grid-column: 1 / -1; } header { padding: 12px 16px; flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+<header>
+  <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="2" y="15" width="22" height="6" rx="3" fill="#2b3544"/><path d="M7 15V9l7-4" stroke="#4da3ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="14" cy="5" r="2.5" fill="#e6ebf2"/></svg>
+  <h1>Robot Factory Bridge <span>/ HMI</span></h1>
+  <div class="spacer"></div>
+  <div class="pill" id="summary"><span class="dot"></span><span>connecting&hellip;</span></div>
+  <div class="pill" id="clock"></div>
+</header>
+
+<main>
+  <div class="grid" id="grid"></div>
+
+  <section class="log" aria-labelledby="log-h">
+    <h2 id="log-h">Event log</h2>
+    <div id="events" aria-live="polite"><div class="empty">No events yet.</div></div>
+  </section>
+
+  <footer>Every card talks to its factory through the same canonical interface: <code>start</code> <code>estop</code> <code>status</code> <code>cycle_count</code>. Only the config behind it differs.</footer>
+</main>
+
+<script>
+const PROTOCOLS = { opcua: "OPC UA", modbus: "Modbus TCP" };
+const STATES = {
+  IDLE:     ["idle",    "IDLE",          "Waiting for a start command"],
+  RUNNING:  ["running", "RUNNING",       "Cycle in progress"],
+  FAULT:    ["fault",   "FAULT",         "Factory reports a fault"],
+  ESTOPPED: ["estop",   "E-STOP ACTIVE", "Start is refused until the e-stop is reset"],
+};
+const cards = {};
+const grid = document.getElementById("grid");
+let demo = false;
+
+const sceneSvg = `
+<svg class="scene" viewBox="0 0 360 150" role="img" aria-label="Robot cell with conveyor">
+  <rect class="floor" x="0" y="130" width="360" height="20"/>
+  <rect class="base" x="44" y="108" width="52" height="22" rx="4"/>
+  <rect class="conv" x="112" y="108" width="236" height="16" rx="8"/>
+  <line class="belt" x1="124" y1="116" x2="336" y2="116"/>
+  <circle class="roller" cx="122" cy="116" r="6"/><circle class="roller" cx="338" cy="116" r="6"/>
+  <g class="moving">
+    <rect class="part p1" x="128" y="92" width="22" height="16" rx="3"/>
+    <rect class="part p2" x="128" y="92" width="22" height="16" rx="3"/>
+    <rect class="part p3" x="128" y="92" width="22" height="16" rx="3"/>
+    <g class="upper">
+      <line class="link" x1="70" y1="96" x2="70" y2="46"/>
+      <g class="fore">
+        <line class="link" x1="70" y1="46" x2="124" y2="46"/>
+        <path class="grip" d="M124 38v16M124 38h8M124 54h8"/>
+        <circle class="joint" cx="70" cy="46" r="5"/>
+      </g>
+      <circle class="joint" cx="70" cy="96" r="5"/>
+    </g>
+  </g>
+  <circle class="beacon" cx="334" cy="34" r="7"/>
+  <text class="nodata" x="180" y="78" text-anchor="middle">NO DATA</text>
+</svg>`;
+
+function title(name) { return name.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
+
+function makeCard(st) {
+  const el = document.createElement("article");
+  el.className = "card st-offline";
+  el.innerHTML = `
+    <div class="card-head"><h2></h2><span class="chip"></span><span class="endpoint"></span></div>
+    <div class="release" hidden><span>Release <b data-f="release"></b></span><span class="ota"></span></div>
+    <div class="banner"><div><div class="big">&nbsp;</div><div class="sub">&nbsp;</div></div></div>
+    ${sceneSvg}
+    <div class="metrics">
+      <div class="metric"><div class="k">Cycles</div><div class="v" data-f="cycles">&ndash;</div></div>
+      <div class="metric"><div class="k">Start cmd</div><div class="v small" data-f="start">&ndash;</div></div>
+      <div class="metric"><div class="k">E-stop</div><div class="v small" data-f="estop">&ndash;</div></div>
+    </div>
+    <div class="controls">
+      <button class="b-start" data-cmd="start">Start</button>
+      <button data-cmd="stop">Stop</button>
+      <button data-cmd="reset_estop">Reset e-stop</button>
+      <button class="b-estop" data-cmd="emergency_stop" aria-label="Emergency stop">E-STOP</button>
+      <div class="result" role="status"></div>
+    </div>
+    <details open><summary>Tag map: canonical name &rarr; this factory's native address</summary>
+      <table><thead><tr><th>Canonical</th><th>Native address</th></tr></thead><tbody></tbody></table>
+    </details>
+    <div class="demo-tools" hidden>Demo tools:
+      <button data-demo="false">Drop link</button><button data-demo="true">Restore link</button></div>`;
+  el.querySelector("h2").textContent = title(st.name);
+  el.querySelector(".chip").textContent = PROTOCOLS[st.protocol] || st.protocol;
+  el.querySelector(".endpoint").textContent = st.endpoint;
+  const tbody = el.querySelector("tbody");
+  for (const [tag, addr] of Object.entries(st.mapping)) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td></td><td class='addr'></td>";
+    tr.children[0].textContent = tag; tr.children[1].textContent = addr;
+    tbody.appendChild(tr);
+  }
+  el.querySelectorAll("[data-cmd]").forEach(b => b.addEventListener("click", () => send(st.key, b.dataset.cmd, el, b)));
+  el.querySelectorAll("[data-demo]").forEach(b => b.addEventListener("click", async () => {
+    await post("/api/demo", { station: st.key, online: b.dataset.demo === "true" });
+    refresh();
+  }));
+  grid.appendChild(el);
+  return { el, timer: null };
+}
+
+function setText(el, f, text, cls) {
+  const n = el.querySelector(`[data-f="${f}"]`);
+  n.textContent = text; n.className = "v" + (n.classList.contains("small") ? " small" : "") + (cls ? " " + cls : "");
+}
+
+function render(st) {
+  const c = cards[st.key] ||= makeCard(st);
+  const el = c.el;
+  const [cls, label, sub] = st.connected ? (STATES[st.status] || ["idle", st.status, ""]) : ["offline", "COMMS LOST", st.error || "Trying to reconnect"];
+  el.className = "card st-" + cls;
+  el.querySelector(".big").textContent = label;
+  el.querySelector(".sub").textContent = sub;
+  setText(el, "cycles", st.connected ? String(st.cycle_count) : "–");
+  setText(el, "start", st.connected ? (st.start ? "ON" : "OFF") : "–", st.start ? "good" : "");
+  setText(el, "estop", st.connected ? (st.estop ? "ACTIVE" : "CLEAR") : "–", st.estop ? "alarm" : "");
+  el.querySelector(".demo-tools").hidden = !demo;
+  const rel = el.querySelector(".release");
+  rel.hidden = !st.release;
+  if (st.release) {
+    rel.querySelector("[data-f=release]").textContent = st.release;
+    const o = rel.querySelector(".ota"), l = st.last_ota;
+    if (l && l.action === "deploy") {
+      const bad = l.result !== "activated";
+      o.className = "ota " + (bad ? "warn" : "ok");
+      const d = l.detail.length > 120 ? l.detail.slice(0, 117) + "\u2026" : l.detail;
+      o.title = l.detail;
+      o.textContent = `Last update: ${l.version} ${l.result.replace("_", " ")} at ${l.time.slice(11)}` + (bad ? ` \u2013 ${d}` : "");
+    } else if (l && l.action === "rollback") {
+      o.className = "ota warn"; o.textContent = `Rolled back to ${l.version} at ${l.time.slice(11)}`;
+    } else { o.textContent = ""; o.className = "ota"; }
+  }
+}
+
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return r.json();
+}
+
+async function send(station, command, card, button) {
+  button.disabled = true;
+  const out = card.querySelector(".result");
+  try {
+    const r = await post("/api/command", { station, command });
+    const refused = !r.ok && /refused/.test(r.message || "");
+    out.className = "result " + (r.ok ? "ok" : refused ? "refused" : "error");
+    out.textContent = r.ok ? `${command.replace("_", " ")}: accepted` : (r.message || r.error || "failed");
+    if (!r.ok) { card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake"); }
+  } catch (e) {
+    out.className = "result error"; out.textContent = "HMI server not reachable";
+  }
+  clearTimeout(cards[station].timer);
+  cards[station].timer = setTimeout(() => { out.textContent = ""; out.className = "result"; }, 5000);
+  button.disabled = false;
+  refresh();
+}
+
+function renderEvents(events) {
+  const box = document.getElementById("events");
+  if (!events.length) { box.innerHTML = '<div class="empty">No events yet.</div>'; return; }
+  box.replaceChildren(...events.map(e => {
+    const row = document.createElement("div");
+    row.className = "ev " + e.level;
+    for (const [cls, text] of [["t", e.time], ["s", e.station], ["lv", e.level.toUpperCase()], ["m", e.message]]) {
+      const s = document.createElement("span"); s.className = cls; s.textContent = text; row.appendChild(s);
+    }
+    return row;
+  }));
+}
+
+function setSummary(ok, text) {
+  const s = document.getElementById("summary");
+  s.querySelector(".dot").className = "dot " + (ok ? "on" : "off");
+  s.querySelector("span:last-child").textContent = text;
+}
+
+async function refresh() {
+  try {
+    const state = await (await fetch("/api/state", { cache: "no-store" })).json();
+    demo = state.demo;
+    state.stations.forEach(render);
+    renderEvents(state.events);
+    const online = state.stations.filter(s => s.connected).length;
+    setSummary(online === state.stations.length, `${online}/${state.stations.length} stations online` + (demo ? " (demo)" : ""));
+  } catch (e) {
+    setSummary(false, "HMI server not reachable");
+    Object.values(cards).forEach(c => c.el.className = "card st-offline");
+  }
+}
+
+setInterval(() => { document.getElementById("clock").textContent = new Date().toLocaleTimeString(); }, 1000);
+refresh(); setInterval(refresh, 500);
+</script>
+</body>
+</html>

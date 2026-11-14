@@ -5,12 +5,14 @@ new customer means a new config file, not a new custom build.
 
 Two simulated factories speak different industrial protocols with different tag
 layouts (OPC UA and Modbus TCP). A single adapter maps both onto one canonical
-model, enforces a safety rule in the middle, and a ROS2 bridge exposes the result
-to the robot side.
+model, enforces a safety rule in the middle, a ROS2 bridge exposes the result
+to the robot side, and a browser HMI lets an operator watch and drive both factories, and a release
+flow updates a factory's config with checks and automatic rollback.
 
 ```mermaid
 flowchart TB
     R["Robot side<br/>(ROS2 nodes, AI stack)"] -->|"topics + services"| B["ros2_bridge<br/>one process per factory"]
+    H["Browser HMI<br/>operator screen"] --> A
     B --> A["Adapter<br/>canonical model + safety rules"]
     A -->|"factory_a.yaml"| D1["OPC UA driver"]
     A -->|"factory_b.yaml"| D2["Modbus TCP driver"]
@@ -39,7 +41,11 @@ adapter/          canonical model, config loader, drivers (opcua, modbus), safet
 config/           one YAML per factory
 sim/              simulated factories (OPC UA server, Modbus server) + smoke test
 ros2_bridge/      ROS2 node: state as topics, commands as services
-tests/            24 tests (adapter logic, config validation, bridge helpers)
+hmi/              browser HMI: live status, commands, event log (stdlib only)
+ota/              release flow: verify, pre-flight, switch, confirm, roll back
+releases/         example release bundles (one good, one broken on purpose)
+config/docker/    the factory configs with container host names
+tests/            54 tests (adapter logic, config validation, bridge helpers, HMI, releases)
 docs/             factory layouts, ROS2 interface notes
 demo.py           the same robot-side code driving both factories
 ```
@@ -53,7 +59,7 @@ prebuilt wheels for some dependencies.
 python -m venv .venv
 .venv\Scripts\Activate.ps1          # Linux: source .venv/bin/activate
 pip install -r requirements.txt
-python -m pytest                    # 24 passed
+python -m pytest                    # 54 passed
 ```
 
 Run the two simulated factories in two terminals, then the demo in a third:
@@ -66,6 +72,38 @@ python demo.py
 
 `demo.py` runs one function against both factories: start, run, emergency stop,
 refused restart, reset.
+
+## HMI (browser)
+
+![HMI](docs/img/hmi.png)
+
+```
+python -m hmi.server --demo        # nothing else needed
+python -m hmi.server               # against the two simulators
+```
+
+Open http://localhost:8080. Two cards show each factory's live state, an animated robot
+cell, the tag map (same canonical tags, different native addresses) and an event log
+that includes safety refusals and lost links. No extra packages. Details in
+[docs/hmi.md](docs/hmi.md).
+
+## Releases and rollback
+
+![HMI after a failed release](docs/img/hmi-ota.png)
+
+A simulated over-the-air update: a release is a config bundle with a checksum. It must
+pass a pre-flight against the factory, then the *running* HMI must confirm it, otherwise
+the previous release is restored automatically.
+
+```
+python -m ota init
+python -m hmi.server --demo --deploy deploy
+python -m ota deploy releases/factory-b-v1.2.0 --service http://localhost:8080 --demo --skip-preflight
+```
+
+The last command ships a broken release past pre-flight: factory B goes COMMS LOST, the
+deployer rolls back, and the card recovers. Details and all scenarios in
+[docs/ota.md](docs/ota.md). `docker compose up --build` starts everything in containers.
 
 ## ROS2 bridge (Ubuntu 24.04, ROS2 Jazzy)
 
@@ -99,12 +137,12 @@ ROS2 node are exercised end to end with the simulators (see above).
 ## Status and roadmap
 
 Done: canonical model, OPC UA and Modbus drivers, YAML-driven factories, safety rules,
-simulators, ROS2 bridge, tests.
+simulators, ROS2 bridge, browser HMI, release flow with rollback, Docker files, tests.
 
 Planned:
 - C++ `ros2_control` hardware interface for a simulated actuator
 - MQTT as a third protocol and factory
-- Docker packaging, health checks and a simulated over-the-air update with rollback
+- Run the Docker setup end to end and add signed bundles
 - Fault injection and a diagnostic tool that classifies field issues
 - Safety note mapping the interlock to ISO 13849 concepts
 

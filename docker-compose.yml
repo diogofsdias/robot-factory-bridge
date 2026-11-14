@@ -1,0 +1,18 @@
+# Whole system in containers: two simulated factories plus the HMI.
+#   docker compose up --build        then open http://localhost:8080
+services:
+  opcua-sim:
+    build: .
+    command: python sim/opcua_server.py
+  modbus-sim:
+    build: .
+    command: python sim/modbus_server.py
+  hmi:
+    build: .
+    command: >
+      python -m hmi.server --host 0.0.0.0
+      --config config/docker/factory_a.yaml --config config/docker/factory_b.yaml
+    ports:
+      - "127.0.0.1:8080:8080"   # local only
+    depends_on: [opcua-sim, modbus-sim]
+    restart: unless-stopped

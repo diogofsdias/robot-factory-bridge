@@ -1,0 +1,19 @@
+name: factory-b
+protocol: modbus
+connection:
+  host: modbus-sim
+  port: 5020
+  unit: 1
+tags:
+  start: 0
+  estop: 1
+  status: 2
+  cycle_count: 3
+# Optional: translate this factory's raw status codes to the canonical ones.
+# Factory B happens to use the same numbers, so this is an identity mapping,
+# but a real factory often does not (e.g. 10 = running).
+status_map:
+  0: idle
+  1: running
+  2: fault
+  3: estopped
