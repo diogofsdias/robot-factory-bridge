@@ -85,10 +85,5 @@ python -m ota deploy releases/factory-b-v1.3.0 --service http://localhost:8080
 
 ## Docker
 
-```
-docker compose up --build        # simulators + HMI, then open http://localhost:8080
-```
-
-`config/docker/` holds the same factory configs with container host names. These Docker files
-were written alongside the rest but have **not** been run yet; if something fails, the
-first suspects are the OPC UA host name and the pinned pymodbus version.
+The same flow runs inside containers against the real OPC UA and Modbus servers. See
+[docker.md](docker.md).

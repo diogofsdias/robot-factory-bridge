@@ -1,0 +1,7 @@
+{
+  "factory": "factory-b",
+  "version": "v1.2.0",
+  "sha256": "b45af91b0abb8453935c7a8ccec531d16308b82da79d73650f0821cf2303f260",
+  "notes": "broken on purpose: status register 99 does not exist",
+  "created": "2026-11-14 18:02:41"
+}

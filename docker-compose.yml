@@ -1,5 +1,7 @@
-# Whole system in containers: two simulated factories plus the HMI.
-#   docker compose up --build        then open http://localhost:8080
+# Whole system in containers: two simulated factories (real OPC UA and Modbus servers)
+# plus the HMI, with the release flow wired in.
+#   docker compose up --build          then open http://localhost:8080
+# Release commands: see docs/docker.md
 services:
   opcua-sim:
     build: .
@@ -9,10 +11,21 @@ services:
     command: python sim/modbus_server.py
   hmi:
     build: .
-    command: >
-      python -m hmi.server --host 0.0.0.0
-      --config config/docker/factory_a.yaml --config config/docker/factory_b.yaml
+    # First start: create the v1.0.0 releases in the deploy volume. Then run the HMI on them.
+    command:
+      - sh
+      - -c
+      - |
+        [ -f deploy/factory-a/state.json ] || python -m ota --root deploy init \
+          --config config/docker/factory_a.yaml --config config/docker/factory_b.yaml
+        exec python -m hmi.server --host 0.0.0.0 --deploy deploy
     ports:
       - "127.0.0.1:8080:8080"   # local only
+    volumes:
+      - deploy-data:/app/deploy        # active release + history survive restarts
+      - ./releases:/app/releases:ro    # bundles you want to roll out
     depends_on: [opcua-sim, modbus-sim]
     restart: unless-stopped
+
+volumes:
+  deploy-data:

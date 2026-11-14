@@ -103,7 +103,8 @@ python -m ota deploy releases/factory-b-v1.2.0 --service http://localhost:8080 -
 
 The last command ships a broken release past pre-flight: factory B goes COMMS LOST, the
 deployer rolls back, and the card recovers. Details and all scenarios in
-[docs/ota.md](docs/ota.md). `docker compose up --build` starts everything in containers.
+[docs/ota.md](docs/ota.md). The whole system also runs in containers, see
+[docs/docker.md](docs/docker.md).
 
 ## ROS2 bridge (Ubuntu 24.04, ROS2 Jazzy)
 
