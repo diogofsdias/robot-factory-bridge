@@ -1,0 +1,10 @@
+name: factory-a
+protocol: opcua
+connection:
+  url: opc.tcp://localhost:4840/factory/
+  namespace: urn:factory:a
+tags:
+  start: Station/Start
+  estop: Station/EStop
+  status: Station/Status
+  cycle_count: Station/CycleCount
