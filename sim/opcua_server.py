@@ -48,4 +48,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger("asyncua").setLevel(logging.WARNING)  # one INFO line per read floods the logs
     asyncio.run(main())

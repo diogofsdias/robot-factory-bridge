@@ -45,7 +45,7 @@ hmi/              browser HMI: live status, commands, event log (stdlib only)
 ota/              release flow: verify, pre-flight, switch, confirm, roll back
 releases/         example release bundles (one good, one broken on purpose)
 config/docker/    the factory configs with container host names
-tests/            54 tests (adapter logic, config validation, bridge helpers, HMI, releases)
+tests/            55 tests (adapter logic, config validation, bridge helpers, HMI, releases)
 docs/             factory layouts, ROS2 interface notes
 demo.py           the same robot-side code driving both factories
 ```
@@ -59,7 +59,7 @@ prebuilt wheels for some dependencies.
 python -m venv .venv
 .venv\Scripts\Activate.ps1          # Linux: source .venv/bin/activate
 pip install -r requirements.txt
-python -m pytest                    # 54 passed
+python -m pytest                    # 55 passed
 ```
 
 Run the two simulated factories in two terminals, then the demo in a third:

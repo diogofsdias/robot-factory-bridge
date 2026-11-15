@@ -31,7 +31,9 @@ class Manifest:
 
 
 def sha256_of(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    """SHA-256 of the file with Windows line endings normalised, so a bundle that git or
+    an editor converted to CRLF still verifies. Any other change still fails."""
+    return hashlib.sha256(Path(path).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def pack(config_path: Path, version: str, out_dir: Path, notes: str = "") -> Path:

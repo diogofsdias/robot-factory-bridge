@@ -72,6 +72,12 @@ def test_tampered_bundle_is_rejected(tmp_path):
         verify(b)
 
 
+def test_bundle_still_verifies_after_windows_line_endings(tmp_path):
+    b = make_bundle(tmp_path, "v1.1.0")
+    (b / CONFIG).write_bytes((b / CONFIG).read_bytes().replace(b"\n", b"\r\n"))
+    assert verify(b).version == "v1.1.0"
+
+
 def test_unsafe_version_and_manifest_are_refused(tmp_path):
     assert not valid_version("../../etc") and valid_version("v1.2.3-rc1")
     b = make_bundle(tmp_path, "v1.1.0")
